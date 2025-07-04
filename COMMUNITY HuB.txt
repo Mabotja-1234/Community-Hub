@@ -1,0 +1,369 @@
+"use client"
+
+import { useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Separator } from "@/components/ui/separator"
+import { useSharingGroups } from "@/hooks/use-sharing-groups"
+import { Mail, Send, Users, Plus, X, Check, Clock, UserPlus } from "lucide-react"
+
+export function InvitationTestPanel() {
+  const { myGroups, invitations, inviteMembers, acceptInvitation, declineInvitation, currentUser, loading } =
+    useSharingGroups()
+
+  const [selectedGroupId, setSelectedGroupId] = useState<string>("")
+  const [inviteEmails, setInviteEmails] = useState<string[]>([])
+  const [newEmail, setNewEmail] = useState("")
+  const [inviteMessage, setInviteMessage] = useState("")
+  const [isSending, setIsSending] = useState(false)
+
+  const selectedGroup = myGroups.find((g) => g.id === selectedGroupId)
+  const canInvite = selectedGroup?.members.find((m) => m.userId === currentUser.id)?.permissions.canInvite
+
+  const addEmail = () => {
+    if (newEmail.trim() && !inviteEmails.includes(newEmail.trim()) && inviteEmails.length < 10) {
+      setInviteEmails([...inviteEmails, newEmail.trim()])
+      setNewEmail("")
+    }
+  }
+
+  const removeEmail = (email: string) => {
+    setInviteEmails(inviteEmails.filter((e) => e !== email))
+  }
+
+  const handleSendInvitations = async () => {
+    if (!selectedGroupId || inviteEmails.length === 0) return
+
+    setIsSending(true)
+    try {
+      const result = await inviteMembers(selectedGroupId, inviteEmails, inviteMessage)
+
+      if (result.sent.length > 0) {
+        alert(`✅ Invitations sent successfully to: ${result.sent.join(", ")}`)
+      }
+      if (result.failed.length > 0) {
+        alert(`❌ Failed to send invitations to: ${result.failed.join(", ")}`)
+      }
+
+      // Reset form
+      setInviteEmails([])
+      setInviteMessage("")
+    } catch (error) {
+      alert(`Error: ${error instanceof Error ? error.message : "Failed to send invitations"}`)
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  const handleAcceptInvitation = async (invitationId: string) => {
+    try {
+      await acceptInvitation(invitationId)
+      alert("✅ Invitation accepted! You've joined the group.")
+    } catch (error) {
+      alert(`Error: ${error instanceof Error ? error.message : "Failed to accept invitation"}`)
+    }
+  }
+
+  const handleDeclineInvitation = async (invitationId: string) => {
+    try {
+      await declineInvitation(invitationId)
+      alert("❌ Invitation declined.")
+    } catch (error) {
+      alert(`Error: ${error instanceof Error ? error.message : "Failed to decline invitation"}`)
+    }
+  }
+
+  const pendingInvitations = invitations.filter((inv) => inv.status === "pending")
+  const processedInvitations = invitations.filter((inv) => inv.status !== "pending")
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Card className="animate-pulse">
+          <CardContent className="p-6">
+            <div className="h-4 bg-gray-200 rounded w-1/2 mb-4"></div>
+            <div className="h-3 bg-gray-200 rounded w-full mb-2"></div>
+            <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Invitation Sender */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Send className="h-5 w-5" />
+            <span>Send Invitations</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {myGroups.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Groups Available</h3>
+              <p className="text-gray-600">Create a group first to send invitations</p>
+            </div>
+          ) : (
+            <>
+              {/* Group Selection */}
+              <div>
+                <Label htmlFor="groupSelect">Select Group</Label>
+                <select
+                  id="groupSelect"
+                  value={selectedGroupId}
+                  onChange={(e) => setSelectedGroupId(e.target.value)}
+                  className="w-full mt-1 p-2 border border-gray-300 rounded-md"
+                >
+                  <option value="">Choose a group...</option>
+                  {myGroups.map((group) => {
+                    const member = group.members.find((m) => m.userId === currentUser.id)
+                    const canInviteToGroup = member?.permissions.canInvite
+                    return (
+                      <option key={group.id} value={group.id} disabled={!canInviteToGroup}>
+                        {group.name} ({group.type}) {!canInviteToGroup && "- No invite permission"}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+
+              {selectedGroup && (
+                <>
+                  {/* Group Info */}
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="text-2xl">
+                        {selectedGroup.type === "family"
+                          ? "👨‍👩‍👧‍👦"
+                          : selectedGroup.type === "organization"
+                            ? "🏢"
+                            : selectedGroup.type === "friends"
+                              ? "👥"
+                              : selectedGroup.type === "community"
+                                ? "🏘️"
+                                : "📍"}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold">{selectedGroup.name}</h4>
+                        <p className="text-sm text-gray-600">{selectedGroup.description}</p>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <Badge variant="outline">{selectedGroup.type}</Badge>
+                          <Badge variant="outline">{selectedGroup.privacy}</Badge>
+                          <span className="text-xs text-gray-500">{selectedGroup.stats.totalMembers} members</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {canInvite ? (
+                    <>
+                      {/* Email Input */}
+                      <div>
+                        <Label htmlFor="emailInput">Invite Email Addresses</Label>
+                        <div className="flex space-x-2 mt-1">
+                          <Input
+                            id="emailInput"
+                            type="email"
+                            value={newEmail}
+                            onChange={(e) => setNewEmail(e.target.value)}
+                            placeholder="Enter email address"
+                            onKeyPress={(e) => e.key === "Enter" && addEmail()}
+                          />
+                          <Button onClick={addEmail} size="sm" disabled={inviteEmails.length >= 10}>
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Press Enter or click + to add emails (max 10)</p>
+                      </div>
+
+                      {/* Email List */}
+                      {inviteEmails.length > 0 && (
+                        <div>
+                          <Label>Email List ({inviteEmails.length})</Label>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {inviteEmails.map((email) => (
+                              <Badge key={email} variant="secondary" className="flex items-center space-x-1">
+                                <span>{email}</span>
+                                <button onClick={() => removeEmail(email)} className="ml-1">
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Invitation Message */}
+                      <div>
+                        <Label htmlFor="inviteMessage">Personal Message (optional)</Label>
+                        <Textarea
+                          id="inviteMessage"
+                          value={inviteMessage}
+                          onChange={(e) => setInviteMessage(e.target.value)}
+                          placeholder="Add a personal message to your invitation..."
+                          rows={3}
+                          maxLength={500}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">{inviteMessage.length}/500 characters</p>
+                      </div>
+
+                      {/* Send Button */}
+                      <Button
+                        onClick={handleSendInvitations}
+                        disabled={inviteEmails.length === 0 || isSending}
+                        className="w-full"
+                      >
+                        <Mail className="h-4 w-4 mr-2" />
+                        {isSending
+                          ? "Sending..."
+                          : `Send ${inviteEmails.length} Invitation${inviteEmails.length !== 1 ? "s" : ""}`}
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                      <div className="flex items-center space-x-2">
+                        <UserPlus className="h-5 w-5 text-yellow-600" />
+                        <span className="font-medium text-yellow-800">No Invitation Permission</span>
+                      </div>
+                      <p className="text-sm text-yellow-700 mt-1">
+                        You don't have permission to invite members to this group. Contact a group admin or owner.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Pending Invitations */}
+      {pendingInvitations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Clock className="h-5 w-5 text-yellow-600" />
+              <span>Pending Invitations ({pendingInvitations.length})</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {pendingInvitations.map((invitation) => (
+                <div key={invitation.id} className="border border-yellow-200 bg-yellow-50 rounded-lg p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start space-x-3">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src="/placeholder.svg" />
+                        <AvatarFallback>
+                          {invitation.invitedByName
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <h4 className="font-semibold">{invitation.groupName}</h4>
+                        <p className="text-sm text-gray-600">
+                          Invited by {invitation.invitedByName} • {new Date(invitation.invitedAt).toLocaleDateString()}
+                        </p>
+                        {invitation.message && (
+                          <div className="mt-2 p-2 bg-white rounded border">
+                            <p className="text-sm">"{invitation.message}"</p>
+                          </div>
+                        )}
+                        <p className="text-xs text-gray-500 mt-2">
+                          Expires: {new Date(invitation.expiresAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button variant="outline" size="sm" onClick={() => handleDeclineInvitation(invitation.id)}>
+                        <X className="h-4 w-4 mr-1" />
+                        Decline
+                      </Button>
+                      <Button size="sm" onClick={() => handleAcceptInvitation(invitation.id)}>
+                        <Check className="h-4 w-4 mr-1" />
+                        Accept
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Invitation History */}
+      {processedInvitations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Invitation History ({processedInvitations.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {processedInvitations.slice(0, 5).map((invitation) => (
+                <div key={invitation.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src="/placeholder.svg" />
+                      <AvatarFallback>
+                        {invitation.invitedByName
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-medium">{invitation.groupName}</p>
+                      <p className="text-xs text-gray-500">
+                        From {invitation.invitedByName} • {new Date(invitation.invitedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={
+                      invitation.status === "accepted"
+                        ? "bg-green-100 text-green-800"
+                        : invitation.status === "declined"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-gray-100 text-gray-800"
+                    }
+                  >
+                    {invitation.status === "accepted" && <Check className="h-3 w-3 mr-1" />}
+                    {invitation.status === "declined" && <X className="h-3 w-3 mr-1" />}
+                    {invitation.status === "expired" && <Clock className="h-3 w-3 mr-1" />}
+                    <span className="capitalize">{invitation.status}</span>
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Empty State */}
+      {invitations.length === 0 && (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Mail className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Invitations Yet</h3>
+            <p className="text-gray-600">Send invitations to others or wait for invitations to appear here</p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
